@@ -1,3 +1,5 @@
+importScripts("browser-polyfill.js");
+
 async function getCurrentTab() {
   const tabs = await browser.tabs.query({
     currentWindow: true,
@@ -215,15 +217,26 @@ async function searchBookmarks(keyword = "", page = 1) {
   return await response.json();
 }
 
-async function openBookmark(url, newTab = true) {
-  if (newTab) {
-    await browser.tabs.create({ active: true, url });
+async function openBookmarkInNewTab(url) {
+  await browser.tabs.create({ active: true, url });
+}
+
+async function openBookmarkInCurrentTab(url) {
+  const tabs = await browser.tabs.query({ currentWindow: true, active: true });
+  if (tabs.length > 0) {
+    await browser.tabs.update(tabs[0].id, { url });
   } else {
-    const tabs = await browser.tabs.query({ currentWindow: true, active: true });
-    if (tabs.length > 0) {
-      await browser.tabs.update(tabs[0].id, { url });
-    }
+    // fallback to opening a new tab if no active tab found
+    await browser.tabs.create({ active: true, url });
   }
+}
+
+async function openBookmark(url, newTab = true) {
+  // keep backward compatibility: delegate to explicit methods
+  if (newTab === false) {
+    return openBookmarkInCurrentTab(url);
+  }
+  return openBookmarkInNewTab(url);
 }
 
 browser.runtime.onMessage.addListener((request) => {
@@ -254,27 +267,30 @@ browser.bookmarks.onCreated.addListener(() => updateIcon());
 browser.bookmarks.onRemoved.addListener(() => updateIcon());
 browser.windows.onFocusChanged.addListener(() => updateIcon());
 
+// Resolve icon paths to absolute extension URLs so service worker can fetch them.
 const bookmarkedIcon = {
-  16: "icons/action-bookmarked-16.png",
-  32: "icons/action-bookmarked-32.png",
-  64: "icons/action-bookmarked-64.png",
-}
+  16: browser.runtime.getURL("icons/action-bookmarked-16.png"),
+  32: browser.runtime.getURL("icons/action-bookmarked-32.png"),
+  64: browser.runtime.getURL("icons/action-bookmarked-64.png"),
+};
 
 const lightModeIcon = {
-  16: "icons/action-default-16.png",
-  32: "icons/action-default-32.png",
-  64: "icons/action-default-64.png",
-}
+  16: browser.runtime.getURL("icons/action-default-16.png"),
+  32: browser.runtime.getURL("icons/action-default-32.png"),
+  64: browser.runtime.getURL("icons/action-default-64.png"),
+};
 
 const darkModeIcon = {
-  16: "icons/action-default-dark-16.png",
-  32: "icons/action-default-dark-32.png",
-  64: "icons/action-default-dark-64.png",
-}
+  16: browser.runtime.getURL("icons/action-default-dark-16.png"),
+  32: browser.runtime.getURL("icons/action-default-dark-32.png"),
+  64: browser.runtime.getURL("icons/action-default-dark-64.png"),
+};
 
 async function updateIcon() {
-  const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const defaultIcon = isDarkMode ? darkModeIcon : lightModeIcon;
+  // Service workers do not have access to window or matchMedia.
+  // Default to light mode icon. Users running in the extension UI (popup/options)
+  // will still see proper CSS-based theme. This is a safe fallback for MV3.
+  const defaultIcon = lightModeIcon;
   try {
 
     const tab = await getCurrentTab();

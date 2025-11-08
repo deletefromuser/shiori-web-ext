@@ -23,10 +23,7 @@
     "<all_urls>"
   ],
   "background": {
-    "scripts": [
-      "js/browser-polyfill.js",
-      "js/background-script.js"
-    ]
+    "service_worker": "js/background-script.js"
   },
   "content_scripts": [
     {
